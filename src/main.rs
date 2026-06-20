@@ -1,4 +1,22 @@
-use std::{io::{stdin, ErrorKind}, path::Path, fs};
+use std::{
+    fs,
+    io::{ErrorKind, stdin},
+    path::Path,
+};
+
+struct HeaderChunk {
+    flag: [u8; 4],
+    length: u32,
+    mode: u16,
+    num_tracks: u16,
+    tpq: u16
+}
+
+struct Chunk {
+    flag: [u8; 4],
+    length: u32,
+    data: Vec<u8>
+}
 
 fn main() -> std::io::Result<()> {
     println!("Whar is the file:");
@@ -29,23 +47,35 @@ fn main() -> std::io::Result<()> {
         let p = Path::new(&path);
         let bytes = fs::read(p).unwrap();
 
-        if  !bytes.starts_with(&[0x4d, 0x54, 0x68, 0x64]) &&
-            !bytes.ends_with(&[0x00, 0x00, 0xFF, 0x2F, 0x00]) {
+        let header: HeaderChunk = HeaderChunk {
+            flag: [bytes[0], bytes[1], bytes[2], bytes[3]],
+            length: u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
+            mode: u16::from_be_bytes([bytes[8], bytes[9]]),
+            num_tracks: u16::from_be_bytes([bytes[10], bytes[11]]),
+            tpq: u16::from_be_bytes([bytes[12], bytes[13]])
+        };
+
+        if header.flag != [0x4D, 0x54, 0x68, 0x64]
+        {
             return Err(std::io::Error::new(
                 ErrorKind::InvalidInput,
-                "This file is corrupted, incomplete, and/or the filetype is unsupported.",
+                "The header flag is incorrect.",
             ));
         }
 
-        let len: u32 = u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]);
-        let mode: u16 = u16::from_be_bytes([bytes[8], bytes[9]]);
-        let num_tracks: u16 = u16::from_be_bytes([bytes[10], bytes[11]]);
-        let tpq: u16 = u16::from_be_bytes([bytes[12], bytes[13]]);
+        let mut tracks: Vec<Chunk> = vec![];
 
-        // This at least works for the midi I'm working with, will extend my testing set in the near future.
-        let name_len = bytes[25] as usize;
-        let name = String::from_utf8(bytes[26..(26 + name_len)].to_vec()).unwrap();
-        println!("The name of the song is: {}", name);
+        let mut next_chunk_offset: usize = (header.length + 8).try_into().unwrap();
+        for _ in 0..header.num_tracks {
+            println!("Offset: {}", next_chunk_offset);
+            let l = u32::from_be_bytes([bytes[next_chunk_offset + 4], bytes[next_chunk_offset + 5], bytes[next_chunk_offset + 6], bytes[next_chunk_offset + 7]]);
+            tracks.insert(tracks.len(), Chunk {
+                flag: [bytes[next_chunk_offset], bytes[next_chunk_offset + 1], bytes[next_chunk_offset + 2], bytes[next_chunk_offset + 3]],
+                length: l,
+                data: bytes[(next_chunk_offset + 4)..(next_chunk_offset + 4 + l as usize)].to_vec()
+            });
+            next_chunk_offset += 8 + l as usize;
+        }
     }
 
     Ok(())
