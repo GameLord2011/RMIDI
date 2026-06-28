@@ -19,15 +19,43 @@ struct Chunk {
 }
 
 struct Message {
-    delta: Vec<u32>, // Erm acktually the MIDI format uses Variable Length Quantities to represent the delta.
+    delta: u32, // Erm acktually the MIDI format uses Variable Length Quantities to represent the delta.
     status: u8,
     data: Vec<u8>,
 }
 
+impl Message {
+    /**
+     * Creates a new (empty) message and returns it.
+     */
+    fn new() -> Message {
+        Message {
+            delta: 0,
+            status: 0,
+            data: vec![]
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+#[used]
+#[unsafe(link_section = ".text")]
+static MESSAGE: [u8; include_bytes!("message.txt").len()] = *include_bytes!("message.txt");
+
+#[cfg(target_os = "macos")]
+#[used]
+#[unsafe(link_section = "__TEXT,__text")]
+static MESSAGE: [u8; include_bytes!("message.txt").len()] = *include_bytes!("message.txt");
+
 fn main() -> std::io::Result<()> {
-    println!("Whar is the file:");
+    let arg: &String = &std::env::args().collect::<Vec<String>>()[1];
     let mut path = String::new();
-    stdin().read_line(&mut path).unwrap();
+    if !arg.is_empty() {
+        path = arg.clone();
+    } else {
+        println!("Whar is the file:");
+        stdin().read_line(&mut path).unwrap();
+    }
     if let Some('\n') = path.chars().next_back() {
         path.pop();
     }
@@ -121,9 +149,11 @@ fn main() -> std::io::Result<()> {
 
     for track in tracks {
         let d = track.data;
-        let mut offset: usize = header.length as usize + 15;
-        // loop {
-            println!("{:X}", offset);
+        let mut offset: usize = 0;
+        // let mut messages: Vec<Message> = vec![];
+        loop {
+            // let mut message = Message::new();
+            println!("{}", offset);
             let possible_bytes = [d[offset], d[offset + 1], d[offset + 2], d[offset + 3]];
             let mut bytes: Vec<u8> = vec![];
             for byte in possible_bytes {
@@ -166,11 +196,9 @@ fn main() -> std::io::Result<()> {
                 n += ((vlq & 0x7f000000) >> 8 * 3) * 0x80 * 0x80 * 0x80;
             }
 
-            println!("Delta 0 is {}", n);
+            println!("D = {}", n);
 
             let status = d[offset + bytes.len()];
-
-            println!("Status 0 is {:X} at offset {:X}", status, offset + bytes.len());
 
             match status {
                 0x80..=0x8F /* Note off */ => {
@@ -183,10 +211,9 @@ fn main() -> std::io::Result<()> {
                 0xFB /* Continue */ => (),
                 0xFC /* End */ => (),
                 0xFF /* Meta Event */ => {
-                    println!("Meta chunk.");
                     match d[offset + bytes.len() + 1] {
                         0x01..=0x06 => {
-                            offset += d[offset + bytes.len() + 2] as usize;
+                            offset += d[offset + bytes.len() + 2] as usize + offset + bytes.len() + 3;
                         },  
                         0x2F => {
                             break;
@@ -196,8 +223,7 @@ fn main() -> std::io::Result<()> {
                 },
                 _ => ()
             }
-            println!("{:X}", offset);
-        // }
+        }
     }
 
     Ok(())
