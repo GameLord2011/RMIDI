@@ -4,7 +4,10 @@ use std::{
     path::Path,
 };
 
-struct HeaderChunk {
+/**
+    The header track.
+ */
+struct HeaderTrack {
     flag: [u8; 4],
     length: u32,
     mode: u16,
@@ -12,12 +15,18 @@ struct HeaderChunk {
     tpq: u16,
 }
 
-struct Chunk {
+/**
+    A generic track.
+ */
+struct Track {
     flag: [u8; 4],
     length: u32,
     data: Vec<u8>,
 }
 
+/**
+    A MIDI message. 
+ */
 #[derive(Clone)]
 struct Message {
     delta: u32, // Erm acktually the MIDI format uses Variable Length Quantities to represent the delta.
@@ -86,7 +95,7 @@ fn main() -> std::io::Result<()> {
     let p = Path::new(&path);
     let bytes = fs::read(p).unwrap();
 
-    let header: HeaderChunk = HeaderChunk {
+    let header: HeaderTrack = HeaderTrack {
         flag: [bytes[0], bytes[1], bytes[2], bytes[3]],
         length: u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
         mode: u16::from_be_bytes([bytes[8], bytes[9]]),
@@ -101,7 +110,7 @@ fn main() -> std::io::Result<()> {
         ));
     }
 
-    let mut tracks: Vec<Chunk> = vec![];
+    let mut tracks: Vec<Track> = vec![];
 
     let mut next_chunk_offset: usize = (header.length + 8).try_into().unwrap();
     for _ in 0..header.num_tracks {
@@ -114,7 +123,7 @@ fn main() -> std::io::Result<()> {
         ]);
         tracks.insert(
             tracks.len(),
-            Chunk {
+            Track {
                 flag: [
                     bytes[next_chunk_offset],
                     bytes[next_chunk_offset + 1],
