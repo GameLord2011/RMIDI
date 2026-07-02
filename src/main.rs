@@ -58,10 +58,10 @@ static MESSAGE: [u8; include_bytes!("message.txt").len()] = *include_bytes!("mes
 static MESSAGE: [u8; include_bytes!("message.txt").len()] = *include_bytes!("message.txt");
 
 fn main() -> std::io::Result<()> {
-    let arg: &String = &std::env::args().collect::<Vec<String>>()[1];
+    let args: Vec<String> = std::env::args().collect::<Vec<String>>();
     let mut path = String::new();
-    if !arg.is_empty() {
-        path = arg.clone();
+    if args.len() > 1 {
+        path = args[1].clone();
     } else {
         println!("Whar is the file:");
         stdin().read_line(&mut path).unwrap();
@@ -217,21 +217,27 @@ fn main() -> std::io::Result<()> {
                 0x90..=0x9F /* Note on */ => {
                     offset += bytes.len() + 3;
                 },
-                0xFA /* Start */ => (),
-                0xFB /* Continue */ => (),
-                0xFC /* End */ => (),
+                0xFA /* Start */ => {println!("Note start")},
+                0xFB /* Continue */ => {println!("Continue")},
+                0xFC /* End */ => {println!("Note end")},
                 0xFF /* Meta Event */ => {
+                    println!("Meta event.");
                     match d[offset + bytes.len() + 1] {
-                        0x01..=0x06 => {
-                            offset += d[offset + bytes.len() + 2] as usize + offset + bytes.len() + 3;
+                        0x01..=0x06 /* String-related things */ => {
+                            println!("String event");
+                            offset += d[offset + bytes.len() + 2] as usize + bytes.len() + 3;
                         },  
-                        0x2F => {
+                        0x2F /* End of track */ => {
+                            println!("Eot; {}, {:X}", status, d[offset + bytes.len() + 1]);
                             break;
                         },
-                        _ => ()
+                        _ => {
+                            println!("Unknown meta event; type is {:X}; length is {} bytes", d[offset + bytes.len() + 1], d[offset + bytes.len() + 2]);
+                            offset += d[offset + bytes.len() + 2] as usize + bytes.len() + 3;
+                        }
                     }
                 },
-                _ => ()
+                _ => {println!("Unknown status {:X}", status)}
             }
         }
     }
